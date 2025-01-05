@@ -18,6 +18,7 @@ type Room struct {
 	Next       *Room
 	Quantity   int
 	Occupied   bool
+	UsedBy     *Ant
 }
 
 // declare a structre to represent the graph using the adjacency list:
@@ -319,33 +320,77 @@ func (colony *Colony) EditNextRoom() {
 	}
 }
 
-func (colony *Colony) SendFromStart(ant *Ant) string {
-	// We want to send ants to available paths, checking for the first available one
-	for _, path := range colony.PathsSet.Paths {
-		firstRoom := path.Rooms[1] // The first room in the path after the start room
-		// If the first room is unoccupied, send the ant there
-		if !firstRoom.Occupied {
-			ant.CurrentPosition = firstRoom
-			firstRoom.Occupied = true
-			colony.Start.Quantity--
-			return fmt.Sprintf(MovesPattern, ant.Name, firstRoom.Name)
+func (colony *Colony) SendAnts(){
+	// firstSLice := []string{}
+	for colony.End.Quantity < colony.AntNum {
+		firstSlice := []string{}     
+		movedAnts := make(map[*Ant]bool) 
+		paths := colony.PathsSet.Paths
+		sort.Slice(paths, func(i, j int) bool {
+			return len(paths[i].Rooms) < len(paths[j].Rooms)
+		})
+		shortPath := paths[0]
+		// Process ants already on paths (backward from end to start)
+		for _, path := range paths {
+			for i := len(path.Rooms) - 1; i >= 0; i-- {
+				room := path.Rooms[i]
+
+				if room.Name == colony.End.Name || room.UsedBy == nil {
+					continue
+				}
+
+				ant := room.UsedBy
+				nextRoom := room.Next
+
+				if nextRoom != nil && !nextRoom.Occupied && !movedAnts[ant] {
+					// Move the ant to the next room
+					room.Occupied = false
+					room.UsedBy = nil
+
+					ant.CurrentPosition = nextRoom
+					if nextRoom.Name != colony.End.Name {
+						nextRoom.Occupied = true
+						nextRoom.UsedBy = ant
+					} else {
+						colony.End.Quantity++
+					}
+					firstSlice = append(firstSlice, fmt.Sprintf(MovesPattern, ant.Name, nextRoom.Name))
+					movedAnts[ant] = true
+				}
+			}
+		}
+
+		// Add new ants to paths (starting from shortest)
+		for _, path := range paths {
+			if len(colony.Ants) > 0 {
+				if len(colony.Ants) == 1 && path != shortPath{continue}
+				nextRoom := path.Rooms[1]
+				if nextRoom.Name == colony.End.Name {
+					// Directly move the ant to the end
+					ant := colony.Ants[0]
+					colony.Ants = colony.Ants[1:]
+
+					ant.CurrentPosition = colony.End
+					colony.End.Quantity++
+					firstSlice = append(firstSlice, fmt.Sprintf(MovesPattern, ant.Name, colony.End.Name))
+				} else if !nextRoom.Occupied {
+					// Move the ant to the next room in the path
+					ant := colony.Ants[0]
+					colony.Ants = colony.Ants[1:]
+
+					nextRoom.Occupied = true
+					nextRoom.UsedBy = ant
+					ant.CurrentPosition = nextRoom
+					firstSlice = append(firstSlice, fmt.Sprintf(MovesPattern, ant.Name, nextRoom.Name))
+					movedAnts[ant] = true
+				}
+			}
+		}
+
+		// Append moves for this turn
+		if len(firstSlice) > 0 {
+			Moves = append(Moves, firstSlice)
 		}
 	}
 
-	// If no path is available, return empty
-	return ""
-}
-
-//	func (colony *Colony) Sendrest(){
-//		if colony
-//	}
-func LogAntsMovement(colony *Colony) {
-	fmt.Println("Current State of Ants:")
-	for _, ant := range colony.Ants {
-		fmt.Printf("Ant %s: %s\n", ant.Name, ant.CurrentPosition.Name)
-	}
-	fmt.Println("Current State of Rooms:")
-	for _, room := range colony.Graph {
-		fmt.Printf("Room %s: Occupied: %v\n", room.Name, room.Occupied)
-	}
 }
